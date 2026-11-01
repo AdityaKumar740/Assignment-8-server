@@ -58,7 +58,21 @@ app.get("/events/:id", async (req, res) => {
 
 app.post("/create-event", async (req, res) => {
   try {
-    const result = await db.collection("events").insertOne(req.body);
+    const { title, description, category, image, location, date, attendees, createdByEmail, organizer } = req.body;
+    if (!title || !description || !category || !image || !location || !date || !createdByEmail) {
+      return res.status(400).json({ message: "All event fields and creator email are required" });
+    }
+    const eventDate = new Date(date);
+    if (Number.isNaN(eventDate.getTime()) || eventDate <= new Date()) {
+      return res.status(400).json({ message: "Event date must be in the future" });
+    }
+    const result = await db.collection("events").insertOne({
+      title, description, category, image, location, date, attendees: Number(attendees ?? 0),
+      createdByEmail: String(createdByEmail).toLowerCase(),
+      organizer: organizer || null,
+      joinedByEmails: [],
+      createdAt: new Date(),
+    });
 
     res.status(201).json({
       acknowledged: result.acknowledged,
@@ -77,6 +91,12 @@ app.delete("/events/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid event ID" });
     }
 
+    const creatorEmail = String(req.query.email || req.body?.email || "").toLowerCase();
+    const event = await db.collection("events").findOne({ _id: new ObjectId(req.params.id) });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+    if (!creatorEmail || String(event.createdByEmail || "").toLowerCase() !== creatorEmail) {
+      return res.status(403).json({ message: "You can only delete events you created" });
+    }
     const result = await db.collection("events").deleteOne({
       _id: new ObjectId(req.params.id),
     });
@@ -89,6 +109,67 @@ app.delete("/events/:id", async (req, res) => {
   } catch (error) {
     console.error("Failed to delete event:", error);
     res.status(500).json({ message: "Failed to delete event" });
+  }
+});
+
+app.patch("/events/:id", async (req, res) => {
+  try {
+    const { ObjectId } = await import("mongodb");
+    if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid event ID" });
+    const email = String(req.body.email || "").toLowerCase();
+    const event = await db.collection("events").findOne({ _id: new ObjectId(req.params.id) });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+    if (!email || String(event.createdByEmail || "").toLowerCase() !== email) {
+      return res.status(403).json({ message: "You can only update events you created" });
+    }
+    const allowed = ["title", "description", "category", "image", "location", "date", "attendees"];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = key === "attendees" ? Number(req.body[key]) : req.body[key];
+    }
+    if (updates.date !== undefined) {
+      const eventDate = new Date(updates.date);
+      if (Number.isNaN(eventDate.getTime()) || eventDate <= new Date()) {
+        return res.status(400).json({ message: "Event date must be in the future" });
+      }
+    }
+    const result = await db.collection("events").updateOne({ _id: new ObjectId(req.params.id) }, { $set: updates });
+    res.json({ acknowledged: result.acknowledged, updatedCount: result.modifiedCount });
+  } catch (error) {
+    console.error("Failed to update event:", error);
+    res.status(500).json({ message: "Failed to update event" });
+  }
+});
+
+app.post("/events/:id/join", async (req, res) => {
+  try {
+    const { ObjectId } = await import("mongodb");
+    if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid event ID" });
+    const email = String(req.body.email || "").toLowerCase();
+    if (!email) return res.status(400).json({ message: "User email is required" });
+    await db.collection("events").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $addToSet: { joinedByEmails: email } }
+    );
+    res.json({ joined: true });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to join event" });
+  }
+});
+
+app.post("/events/:id/leave", async (req, res) => {
+  try {
+    const { ObjectId } = await import("mongodb");
+    if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid event ID" });
+    const email = String(req.body.email || "").toLowerCase();
+    if (!email) return res.status(400).json({ message: "User email is required" });
+    await db.collection("events").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $pull: { joinedByEmails: email } }
+    );
+    res.json({ joined: false });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to leave event" });
   }
 });
 
