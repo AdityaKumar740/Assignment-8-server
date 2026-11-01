@@ -30,9 +30,7 @@ app.get("/test" , (req, res) =>{
     res.json({message : "test api"});
 });
 
-app.get("/create-event", (req, res) => {
-  res.json({ message: "api working.." });
-});
+
 
 //http://localhost:5000/create-event
 
@@ -69,6 +67,28 @@ app.post("/create-event", async (req, res) => {
   } catch (error) {
     console.error("Failed to create event:", error);
     res.status(500).json({ message: "Failed to create event" });
+  }
+});
+
+app.delete("/events/:id", async (req, res) => {
+  try {
+    const { ObjectId } = await import("mongodb");
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "Invalid event ID" });
+    }
+
+    const result = await db.collection("events").deleteOne({
+      _id: new ObjectId(req.params.id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    res.json({ acknowledged: result.acknowledged, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("Failed to delete event:", error);
+    res.status(500).json({ message: "Failed to delete event" });
   }
 });
 
