@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { MongoClient } from 'mongodb';
 import 'dotenv/config';
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const PORT = 5000;
 
@@ -11,6 +12,8 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 app.use(express.json());
+
+const JWKS = createRemoteJWKSet(new URL("http://localhost:3000/api/auth/jwks"));
 app.use((request, response, next) => {
   console.log("Authorization:", request.headers.authorization);
   next();
@@ -148,16 +151,24 @@ app.patch("/events/:id", async (req, res) => {
   }
 });
 
-app.use("/events/:id/:action", (req, res, next) => {
+app.use("/events/:id/:action", async (req, res, next) => {
   const authorization = req.headers.authorization;
   if (!authorization || !authorization.startsWith("Bearer ")) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  if (!authorization.slice(7).trim()) {
+  const token = authorization.slice(7).trim();
+  if (!token) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  console.log("Authorization Bearer token received");
-  next();
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = payload;
+    console.log(payload);
+    next();
+  } catch (error) {
+    console.error("JWT verification failed:", error.message);
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 });
 
 app.post("/events/:id/join", async (req, res) => {
