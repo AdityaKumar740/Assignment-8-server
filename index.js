@@ -33,11 +33,6 @@ app.get("/test" , (req, res) =>{
     res.json({message : "test api"});
 });
 
-app.use("/events/:id/:action", (request, response, next) => {
-  console.log("Authorization:", request.headers.authorization ?? "UNDEFINED");
-  next();
-});
-
 //http://localhost:5000/create-event
 
 app.get("/events", async (req, res) => {
@@ -145,6 +140,15 @@ app.patch("/events/:id", async (req, res) => {
     console.error("Failed to update event:", error);
     res.status(500).json({ message: "Failed to update event" });
   }
+});
+
+app.use("/events/:id/:action", (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if (!authorization || !authorization.startsWith("Bearer ") || authorization.slice(7).trim() === "") {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  console.log("Authorization:", authorization);
+  next();
 });
 
 app.post("/events/:id/join", async (req, res) => {
