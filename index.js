@@ -11,7 +11,13 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 app.use(express.json());
- 
+app.use((request, response, next) => {
+  console.log("Authorization:", request.headers.authorization);
+  next();
+});
+
+
+
 const client = new MongoClient(process.env.MONGO_URI);
 export async function connectToMongoDB() {
   try {
@@ -144,10 +150,13 @@ app.patch("/events/:id", async (req, res) => {
 
 app.use("/events/:id/:action", (req, res, next) => {
   const authorization = req.headers.authorization;
-  if (!authorization || !authorization.startsWith("Bearer ") || authorization.slice(7).trim() === "") {
+  if (!authorization || !authorization.startsWith("Bearer ")) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  console.log("Authorization:", authorization);
+  if (!authorization.slice(7).trim()) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  console.log("Authorization Bearer token received");
   next();
 });
 
