@@ -6,7 +6,10 @@ import 'dotenv/config';
 const PORT = 5000;
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.use(express.json());
  
 const client = new MongoClient(process.env.MONGO_URI);
@@ -30,7 +33,10 @@ app.get("/test" , (req, res) =>{
     res.json({message : "test api"});
 });
 
-
+app.use("/events/:id/:action", (request, response, next) => {
+  console.log("Authorization:", request.headers.authorization ?? "UNDEFINED");
+  next();
+});
 
 //http://localhost:5000/create-event
 
