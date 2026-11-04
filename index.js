@@ -183,10 +183,35 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
-app.post("/events/:id/join", async (req, res) => {
+app.post("/events/:id/join", verifyToken, async (req, res) => {
   try {
     const { ObjectId } = await import("mongodb");
     if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid event ID" });
+    const event = await db.collection("events").findOne({
+      _id: new ObjectId(req.params.id)
+    });
+
+    if (!event) {
+      return res.status(404).json({
+        message: "Event not found"
+      });
+    }
+
+    // Check whether the event date has expired
+    const eventDate = new Date(event.date);
+
+    if (Number.isNaN(eventDate.getTime())) {
+      return res.status(400).json({
+        message: "Invalid event date"
+      });
+    }
+
+    if (eventDate.getTime() <= Date.now()) {
+      return res.status(410).json({
+        message: "This event has expired. You cannot join it."
+      });
+    }
+
     const email = String(req.body.email || "").toLowerCase();
     if (!email) return res.status(400).json({ message: "User email is required" });
     await db.collection("events").updateOne(
