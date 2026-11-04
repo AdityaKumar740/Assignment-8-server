@@ -151,25 +151,37 @@ app.patch("/events/:id", async (req, res) => {
   }
 });
 
-app.use("/events/:id/:action", async (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const authorization = req.headers.authorization;
-  if (!authorization || !authorization.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Unauthorized" });
+
+  if (!authorization?.startsWith("Bearer ")) {
+    return res.status(401).json({
+      message: "Authorization token missing"
+    });
   }
-  const token = authorization.slice(7).trim();
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
+
   try {
+    const token = authorization.slice(7).trim();
+
     const { payload } = await jwtVerify(token, JWKS);
+
+    if (!payload.email) {
+      return res.status(401).json({
+        message: "Email missing from JWT"
+      });
+    }
+
     req.user = payload;
-    console.log(payload);
     next();
+
   } catch (error) {
     console.error("JWT verification failed:", error.message);
-    return res.status(401).json({ message: "Unauthorized" });
+
+    return res.status(401).json({
+      message: "JWT verification failed"
+    });
   }
-});
+};
 
 app.post("/events/:id/join", async (req, res) => {
   try {
