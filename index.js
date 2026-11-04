@@ -183,6 +183,7 @@ app.post("/events/:id/join", async (req, res) => {
     );
     res.json({ joined: true });
   } catch (error) {
+    console.error("Join event error:", error);
     res.status(500).json({ message: "Failed to join event" });
   }
 });
@@ -206,3 +207,5 @@ app.post("/events/:id/leave", async (req, res) => {
 app.listen(PORT, () =>{
     console.log (`server is running on port ${PORT}`);
 });
+
+export default app;
