@@ -14,6 +14,12 @@ app.use(cors({
 app.use(express.json());
 
 const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+
+console.log("CLIENT_URL:", process.env.CLIENT_URL);
+console.log(
+  "JWKS URL:",
+  `${process.env.CLIENT_URL}/api/auth/jwks`
+);
 app.use((request, response, next) => {
   console.log("Authorization:", request.headers.authorization);
   next();
