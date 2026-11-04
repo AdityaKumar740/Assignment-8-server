@@ -13,13 +13,26 @@ app.use(cors({
 }));
 app.use(express.json());
 
-const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : undefined;
+const clientUrl = (
+  process.env.CLIENT_URL ||
+  process.env.NEXTAUTH_URL ||
+  productionUrl
+)?.replace(/\/+$/, "");
 
-console.log("CLIENT_URL:", process.env.CLIENT_URL);
-console.log(
-  "JWKS URL:",
-  `${process.env.CLIENT_URL}/api/auth/jwks`
-);
+if (!clientUrl) {
+  throw new Error(
+    "CLIENT_URL, NEXTAUTH_URL, or VERCEL_PROJECT_PRODUCTION_URL must be configured"
+  );
+}
+
+const jwksUrl = new URL("/api/auth/jwks", clientUrl);
+const JWKS = createRemoteJWKSet(jwksUrl);
+
+console.log("CLIENT_URL:", clientUrl);
+console.log("JWKS URL:", jwksUrl.toString());
 app.use((request, response, next) => {
   console.log("Authorization:", request.headers.authorization);
   next();
@@ -34,7 +47,8 @@ export async function connectToMongoDB() {
     console.log("You successfully connected to MongoDB!");
     return client;
   } catch (err) {
-    console.dir(err);
+    console.error("MongoDB connection failed:", err);
+    throw err;
   }
 }
 const connectclient = await connectToMongoDB();
@@ -181,7 +195,11 @@ const verifyToken = async (req, res, next) => {
     next();
 
   } catch (error) {
-    console.error("JWT verification failed:", error.message);
+    console.error("JWT verification failed:", {
+      message: error.message,
+      code: error.code,
+      jwksUrl: jwksUrl.toString(),
+    });
 
     return res.status(401).json({
       message: "JWT verification failed"
@@ -218,7 +236,7 @@ app.post("/events/:id/join", verifyToken, async (req, res) => {
       });
     }
 
-    const email = String(req.body.email || "").toLowerCase();
+    const email = String(req.user.email || "").toLowerCase();
     if (!email) return res.status(400).json({ message: "User email is required" });
     await db.collection("events").updateOne(
       { _id: new ObjectId(req.params.id) },
@@ -231,11 +249,11 @@ app.post("/events/:id/join", verifyToken, async (req, res) => {
   }
 });
 
-app.post("/events/:id/leave", async (req, res) => {
+app.post("/events/:id/leave", verifyToken, async (req, res) => {
   try {
     const { ObjectId } = await import("mongodb");
     if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid event ID" });
-    const email = String(req.body.email || "").toLowerCase();
+    const email = String(req.user.email || "").toLowerCase();
     if (!email) return res.status(400).json({ message: "User email is required" });
     await db.collection("events").updateOne(
       { _id: new ObjectId(req.params.id) },
@@ -247,8 +265,10 @@ app.post("/events/:id/leave", async (req, res) => {
   }
 });
 
-app.listen(PORT, () =>{
-    console.log (`server is running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`server is running on port ${PORT}`);
+  });
+}
 
 export default app;
